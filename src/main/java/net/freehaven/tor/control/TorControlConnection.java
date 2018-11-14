@@ -811,35 +811,109 @@ public class TorControlConnection implements TorControlCommands {
     }
 
     /**
-         * 3.28. DEL_ONION
-    
-      The syntax is:
-        "DEL_ONION" SP ServiceID CRLF
-    
-        ServiceID = The Onion Service address without the trailing ".onion"
-                    suffix
-    
-      Tells the server to remove an Onion ("Hidden") Service, that was
-      previously created via an "ADD_ONION" command.  It is only possible to
-      remove Onion Services that were created on the same control connection
-      as the "DEL_ONION" command, and those that belong to no control
-      connection in particular (The "Detach" flag was specified at creation).
-    
-      If the ServiceID is invalid, or is neither owned by the current control
-      connection nor a detached Onion Service, the server will return a 552.
-    
-      It is the Onion Service server application's responsibility to close
-      existing client connections if desired after the Onion Service has been
-      removed via "DEL_ONION".
-    
-      Tor replies with "250 OK" on success, or a 512 if there are an invalid
-      number of arguments, or a 552 if it doesn't recognize the ServiceID.
-    
-      [DEL_ONION was added in Tor 0.2.7.1-alpha.]
-      [HS v3 support added 0.3.3.1-alpha]
+     * 3.28. DEL_ONION
+     *
+     * The syntax is: "DEL_ONION" SP ServiceID CRLF
+     *
+     * ServiceID = The Onion Service address without the trailing ".onion" suffix
+     *
+     * Tells the server to remove an Onion ("Hidden") Service, that was previously
+     * created via an "ADD_ONION" command. It is only possible to remove Onion
+     * Services that were created on the same control connection as the "DEL_ONION"
+     * command, and those that belong to no control connection in particular (The
+     * "Detach" flag was specified at creation).
+     *
+     * If the ServiceID is invalid, or is neither owned by the current control
+     * connection nor a detached Onion Service, the server will return a 552.
+     *
+     * It is the Onion Service server application's responsibility to close existing
+     * client connections if desired after the Onion Service has been removed via
+     * "DEL_ONION".
+     *
+     * Tor replies with "250 OK" on success, or a 512 if there are an invalid number
+     * of arguments, or a 552 if it doesn't recognize the ServiceID.
+     *
+     * [DEL_ONION was added in Tor 0.2.7.1-alpha.] [HS v3 support added
+     * 0.3.3.1-alpha]
      */
     public void destroyHiddenService(String name) throws IOException {
         sendAndWaitForResponse("DEL_ONION " + name + "\r\n", null);
+    }
+
+    /**
+     * 3.24. AUTHCHALLENGE
+     *
+     * The syntax is: "AUTHCHALLENGE" SP "SAFECOOKIE" SP ClientNonce CRLF
+     *
+     * ClientNonce = 2*HEXDIG / QuotedString
+     *
+     * This command is used to begin the authentication routine for the SAFECOOKIE
+     * method of authentication.
+     *
+     * If the server accepts the command, the server reply format is: "250
+     * AUTHCHALLENGE" SP "SERVERHASH=" ServerHash SP "SERVERNONCE=" ServerNonce CRLF
+     *
+     * ServerHash = 64*64HEXDIG ServerNonce = 64*64HEXDIG
+     *
+     * The ClientNonce, ServerHash, and ServerNonce values are encoded/decoded in
+     * the same way as the argument passed to the AUTHENTICATE command. ServerNonce
+     * MUST be 32 bytes long.
+     *
+     * ServerHash is computed as: HMAC-SHA256("Tor safe cookie authentication
+     * server-to-controller hash", CookieString | ClientNonce | ServerNonce) (with
+     * the HMAC key as its first argument)
+     *
+     * After a controller sends a successful AUTHCHALLENGE command, the next command
+     * sent on the connection must be an AUTHENTICATE command, and the only
+     * authentication string which that AUTHENTICATE command will accept is:
+     * HMAC-SHA256("Tor safe cookie authentication controller-to-server hash",
+     * CookieString | ClientNonce | ServerNonce)
+     *
+     * [Unlike other commands besides AUTHENTICATE, AUTHCHALLENGE may be used (but
+     * only once!) before AUTHENTICATE.]
+     *
+     * [AUTHCHALLENGE was added in Tor 0.2.3.13-alpha.]
+     * 
+     * @throws IOException
+     */
+    public Map<String, byte[]> authChallenge(byte[] clientNonce) throws IOException {
+        Character[] base16 = {'0', '1', '2', '3', '4', '5', '6', '7',
+                '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+
+        String clientNonceString = "";
+        for(byte current : clientNonce)
+            clientNonceString += base16[(current & 0xFF) >> 4] + "" + base16[current & 0xF];
+
+        List<ReplyLine> result = sendAndWaitForResponse("AUTHCHALLENGE SAFECOOKIE " + clientNonceString + "\r\n",
+                null);
+
+        if (!"250".equals(result.get(0).status)) {
+            String error = "";
+            for (ReplyLine line : result)
+                error += line.status + " " + line.msg + ",";
+
+            throw new IOException("Connection failed: " + error);
+        }
+
+        String tmp = result.get(0).msg;
+        final String SERVERHASH = "SERVERHASH";
+        final String SERVERNONCE = "SERVERNONCE";
+
+        Map<String, byte[]> map = new HashMap<String, byte[]>();
+        String serverhash = tmp.substring(tmp.indexOf("=") + 1,
+                tmp.indexOf(" ", tmp.indexOf(SERVERHASH) + SERVERHASH.length()));
+        map.put(SERVERHASH, hexStringToByteArray(serverhash));
+        map.put(SERVERNONCE, hexStringToByteArray(tmp.substring(tmp.lastIndexOf("=") + 1)));
+        return map;
+    }
+
+    private static byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i + 1), 16));
+        }
+        return data;
     }
 }
 
