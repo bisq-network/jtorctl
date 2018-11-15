@@ -795,7 +795,11 @@ public class TorControlConnection implements TorControlCommands {
      * @throws IOException
      */
     public CreateHiddenServiceResult createHiddenService(Integer port) throws IOException {
-        List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION NEW:BEST Port=" + port + "\r\n",
+        return createHiddenService(port, "NEW:BEST");
+    }
+
+    public CreateHiddenServiceResult createHiddenService(Integer port, String private_key) throws IOException {
+        List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION " + private_key + " Port=" + port + "\r\n",
                 null);
 
         ReplyLine last = result.get(result.size() - 1);
@@ -808,7 +812,7 @@ public class TorControlConnection implements TorControlCommands {
         }
 
         return new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
-                result.get(1).msg.replace("PrivateKey=", ""));
+                private_key.contains("NEW") ? result.get(1).msg.replace("PrivateKey=", "") : private_key);
     }
 
     public class CreateHiddenServiceResult {
