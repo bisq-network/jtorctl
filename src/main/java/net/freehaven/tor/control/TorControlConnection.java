@@ -794,7 +794,7 @@ public class TorControlConnection implements TorControlCommands {
      * 
      * @throws IOException
      */
-    public Map<String, String> createHiddenService(Integer port) throws IOException {
+    public CreateHiddenServiceResult createHiddenService(Integer port) throws IOException {
         List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION NEW:BEST Port=" + port + "\r\n",
                 null);
 
@@ -807,11 +807,18 @@ public class TorControlConnection implements TorControlCommands {
             throw new IOException("Connection failed: " + error);
         }
 
-        Map<String, String> tmp = new HashMap<String, String>();
-        tmp.put("ServiceID", result.get(0).msg.replace("ServiceID=", ""));
-        tmp.put("PrivateKey", result.get(1).msg.replace("PrivateKey=", ""));
+        return new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
+                result.get(1).msg.replace("PrivateKey=", ""));
+    }
 
-        return tmp;
+    public class CreateHiddenServiceResult {
+        public final String serviceID;
+        public final String privateKey;
+
+        public CreateHiddenServiceResult(String serviceID, String privateKey) {
+            this.serviceID = serviceID;
+            this.privateKey = privateKey;
+        }
     }
 
     /**
@@ -880,15 +887,10 @@ public class TorControlConnection implements TorControlCommands {
      * 
      * @throws IOException
      */
-    public Map<String, byte[]> authChallenge(byte[] clientNonce) throws IOException {
-        Character[] base16 = {'0', '1', '2', '3', '4', '5', '6', '7',
-                '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+    public AuthChallengeResult authChallenge(byte[] clientNonce) throws IOException {
 
-        String clientNonceString = "";
-        for(byte current : clientNonce)
-            clientNonceString += base16[(current & 0xFF) >> 4] + "" + base16[current & 0xF];
-
-        List<ReplyLine> result = sendAndWaitForResponse("AUTHCHALLENGE SAFECOOKIE " + clientNonceString + "\r\n",
+        List<ReplyLine> result = sendAndWaitForResponse(
+                "AUTHCHALLENGE SAFECOOKIE " + byteArrayToHexString(clientNonce) + "\r\n",
                 null);
 
         if (!"250".equals(result.get(0).status)) {
@@ -901,14 +903,32 @@ public class TorControlConnection implements TorControlCommands {
 
         String tmp = result.get(0).msg;
         final String SERVERHASH = "SERVERHASH";
-        final String SERVERNONCE = "SERVERNONCE";
 
-        Map<String, byte[]> map = new HashMap<String, byte[]>();
         String serverhash = tmp.substring(tmp.indexOf("=") + 1,
                 tmp.indexOf(" ", tmp.indexOf(SERVERHASH) + SERVERHASH.length()));
-        map.put(SERVERHASH, hexStringToByteArray(serverhash));
-        map.put(SERVERNONCE, hexStringToByteArray(tmp.substring(tmp.lastIndexOf("=") + 1)));
-        return map;
+        return new AuthChallengeResult(hexStringToByteArray(serverhash),
+                hexStringToByteArray(tmp.substring(tmp.lastIndexOf("=") + 1)));
+    }
+
+    public class AuthChallengeResult {
+        public final byte[] serverHash;
+        public final byte[] serverNonce;
+
+        public AuthChallengeResult(byte[] serverHash, byte[] serverNonce) {
+            this.serverHash = serverHash;
+            this.serverNonce = serverNonce;
+        }
+    }
+
+    private static String byteArrayToHexString(byte[] b) {
+        Character[] base16 = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+
+        String result = "";
+
+        for (byte current : b)
+            result += base16[(current & 0xFF) >> 4] + "" + base16[current & 0xF];
+
+        return result;
     }
 
     private static byte[] hexStringToByteArray(String s) {
