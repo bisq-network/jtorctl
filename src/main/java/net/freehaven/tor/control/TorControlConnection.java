@@ -745,5 +745,203 @@ public class TorControlConnection implements TorControlCommands {
     public void forgetHiddenService(String hostname) throws IOException {
         sendAndWaitForResponse("FORGETHS " + hostname + "\r\n", null);
     }
+
+    /**
+     * "ADD_ONION" SP KeyType ":" KeyBlob [SP "Flags=" Flag *("," Flag)] [SP
+     * "MaxStreams=" NumStreams] 1*(SP "Port=" VirtPort ["," Target]) (SP
+     * "ClientAuth=" ClientName [":" ClientBlob]) CRLF
+     * 
+     * KeyType = "NEW" / ; The server should generate a key of algorithm KeyBlob
+     * "RSA1024" / ; The server should use the 1024 bit RSA key provided in as
+     * KeyBlob "ED25519-V3"; The server should use the ed25519 v3 key provided in as
+     * KeyBlob
+     * 
+     * KeyBlob = "BEST" / ; The server should generate a key using the "best"
+     * supported algorithm (KeyType == "NEW") "RSA1024" / ; The server should
+     * generate a 1024 bit RSA key (KeyType == "NEW") "ED25519-V3"; The server
+     * should generate an ed25519 private key (KeyType == "NEW") String ; A
+     * serialized private key (without whitespace)
+     * 
+     * Flag = "DiscardPK" / ; The server should not include the newly generated
+     * private key as part of the response. "Detach" / ; Do not associate the newly
+     * created Onion Service to the current control connection. "BasicAuth" / ;
+     * Client authorization is required using the "basic" method. "NonAnonymous" /;
+     * Add a non-anonymous Single Onion Service. Tor checks this flag matches its
+     * configured hidden service anonymity mode. "MaxStreamsCloseCircuit"; Close the
+     * circuit is the maximum streams allowed is reached.
+     * 
+     * NumStreams = A value between 0 and 65535 which is used as the maximum streams
+     * that can be attached on a rendezvous circuit. Setting it to 0 means unlimited
+     * which is also the default behavior.
+     * 
+     * VirtPort = The virtual TCP Port for the Onion Service (As in the
+     * HiddenServicePort "VIRTPORT" argument).
+     * 
+     * Target = The (optional) target for the given VirtPort (As in the optional
+     * HiddenServicePort "TARGET" argument).
+     * 
+     * ClientName = An identifier 1 to 16 characters long, using only characters in
+     * A-Za-z0-9+-_ (no spaces).
+     * 
+     * ClientBlob = Authorization data for the client, in an opaque format specific
+     * to the authorization method.
+     * 
+     * The server reply format is: "250-ServiceID=" ServiceID CRLF
+     * ["250-PrivateKey=" KeyType ":" KeyBlob CRLF] ("250-ClientAuth=" ClientName
+     * ":" ClientBlob CRLF) "250 OK" CRLF
+     * 
+     * ServiceID = The Onion Service address without the trailing ".onion" suffix
+     * 
+     * @throws IOException
+     */
+    public CreateHiddenServiceResult createHiddenService(Integer port) throws IOException {
+        return createHiddenService(port, "NEW:BEST");
+    }
+
+    public CreateHiddenServiceResult createHiddenService(Integer port, String private_key) throws IOException {
+        List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION " + private_key + " Port=" + port + "\r\n",
+                null);
+
+        ReplyLine last = result.get(result.size() - 1);
+        if (!("250".equals(last.status) || "OK".equals(last.msg))) {
+            String error = "";
+            for (ReplyLine line : result)
+                error += line.status + " " + line.msg + ",";
+
+            throw new IOException("Connection failed: " + error);
+        }
+
+        return new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
+                private_key.contains("NEW") ? result.get(1).msg.replace("PrivateKey=", "") : private_key);
+    }
+
+    public class CreateHiddenServiceResult {
+        public final String serviceID;
+        public final String privateKey;
+
+        public CreateHiddenServiceResult(String serviceID, String privateKey) {
+            this.serviceID = serviceID;
+            this.privateKey = privateKey;
+        }
+    }
+
+    /**
+     * 3.28. DEL_ONION
+     *
+     * The syntax is: "DEL_ONION" SP ServiceID CRLF
+     *
+     * ServiceID = The Onion Service address without the trailing ".onion" suffix
+     *
+     * Tells the server to remove an Onion ("Hidden") Service, that was previously
+     * created via an "ADD_ONION" command. It is only possible to remove Onion
+     * Services that were created on the same control connection as the "DEL_ONION"
+     * command, and those that belong to no control connection in particular (The
+     * "Detach" flag was specified at creation).
+     *
+     * If the ServiceID is invalid, or is neither owned by the current control
+     * connection nor a detached Onion Service, the server will return a 552.
+     *
+     * It is the Onion Service server application's responsibility to close existing
+     * client connections if desired after the Onion Service has been removed via
+     * "DEL_ONION".
+     *
+     * Tor replies with "250 OK" on success, or a 512 if there are an invalid number
+     * of arguments, or a 552 if it doesn't recognize the ServiceID.
+     *
+     * [DEL_ONION was added in Tor 0.2.7.1-alpha.] [HS v3 support added
+     * 0.3.3.1-alpha]
+     */
+    public void destroyHiddenService(String name) throws IOException {
+        sendAndWaitForResponse("DEL_ONION " + name + "\r\n", null);
+    }
+
+    /**
+     * 3.24. AUTHCHALLENGE
+     *
+     * The syntax is: "AUTHCHALLENGE" SP "SAFECOOKIE" SP ClientNonce CRLF
+     *
+     * ClientNonce = 2*HEXDIG / QuotedString
+     *
+     * This command is used to begin the authentication routine for the SAFECOOKIE
+     * method of authentication.
+     *
+     * If the server accepts the command, the server reply format is: "250
+     * AUTHCHALLENGE" SP "SERVERHASH=" ServerHash SP "SERVERNONCE=" ServerNonce CRLF
+     *
+     * ServerHash = 64*64HEXDIG ServerNonce = 64*64HEXDIG
+     *
+     * The ClientNonce, ServerHash, and ServerNonce values are encoded/decoded in
+     * the same way as the argument passed to the AUTHENTICATE command. ServerNonce
+     * MUST be 32 bytes long.
+     *
+     * ServerHash is computed as: HMAC-SHA256("Tor safe cookie authentication
+     * server-to-controller hash", CookieString | ClientNonce | ServerNonce) (with
+     * the HMAC key as its first argument)
+     *
+     * After a controller sends a successful AUTHCHALLENGE command, the next command
+     * sent on the connection must be an AUTHENTICATE command, and the only
+     * authentication string which that AUTHENTICATE command will accept is:
+     * HMAC-SHA256("Tor safe cookie authentication controller-to-server hash",
+     * CookieString | ClientNonce | ServerNonce)
+     *
+     * [Unlike other commands besides AUTHENTICATE, AUTHCHALLENGE may be used (but
+     * only once!) before AUTHENTICATE.]
+     *
+     * [AUTHCHALLENGE was added in Tor 0.2.3.13-alpha.]
+     * 
+     * @throws IOException
+     */
+    public AuthChallengeResult authChallenge(byte[] clientNonce) throws IOException {
+
+        List<ReplyLine> result = sendAndWaitForResponse(
+                "AUTHCHALLENGE SAFECOOKIE " + byteArrayToHexString(clientNonce) + "\r\n",
+                null);
+
+        if (!"250".equals(result.get(0).status)) {
+            String error = "";
+            for (ReplyLine line : result)
+                error += line.status + " " + line.msg + ",";
+
+            throw new IOException("Connection failed: " + error);
+        }
+
+        String tmp = result.get(0).msg;
+        final String SERVERHASH = "SERVERHASH";
+
+        String serverhash = tmp.substring(tmp.indexOf("=") + 1,
+                tmp.indexOf(" ", tmp.indexOf(SERVERHASH) + SERVERHASH.length()));
+        return new AuthChallengeResult(hexStringToByteArray(serverhash),
+                hexStringToByteArray(tmp.substring(tmp.lastIndexOf("=") + 1)));
+    }
+
+    public class AuthChallengeResult {
+        public final byte[] serverHash;
+        public final byte[] serverNonce;
+
+        public AuthChallengeResult(byte[] serverHash, byte[] serverNonce) {
+            this.serverHash = serverHash;
+            this.serverNonce = serverNonce;
+        }
+    }
+
+    private static String byteArrayToHexString(byte[] b) {
+        Character[] base16 = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+
+        String result = "";
+
+        for (byte current : b)
+            result += base16[(current & 0xFF) >> 4] + "" + base16[current & 0xF];
+
+        return result;
+    }
+
+    private static byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i + 1), 16));
+        }
+        return data;
+    }
 }
 
