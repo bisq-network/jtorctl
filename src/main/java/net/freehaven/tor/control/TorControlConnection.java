@@ -15,6 +15,7 @@ import java.io.Writer;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -801,18 +802,19 @@ public class TorControlConnection implements TorControlCommands {
     public CreateHiddenServiceResult createHiddenService(Integer port, String private_key) throws IOException {
         List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION " + private_key + " Port=" + port + "\r\n",
                 null);
-
-        ReplyLine last = result.get(result.size() - 1);
-        if (!("250".equals(last.status) || "OK".equals(last.msg))) {
-            String error = "";
-            for (ReplyLine line : result)
-                error += line.status + " " + line.msg + ",";
-
-            throw new IOException("Connection failed: " + error);
-        }
-
-        return new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
+        CreateHiddenServiceResult creationResult = new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
                 private_key.contains("NEW") ? result.get(1).msg.replace("PrivateKey=", "") : private_key);
+
+        /*
+         * by asking for the service we just created, Tor is going to aquire a suitable
+         * hidden service descriptor. When such a descriptor is not found in Tors local
+         * cache, Tor tries to publish the descriptor or at least the onion address. The
+         * nice thing about that is that a HSFETCH (i.e. what isHSAvailable does),
+         * triggers HS_DESC and HS_DESC_CONTENT events when Tor gets the information.
+         */
+        isHSAvailable(creationResult.serviceID);
+
+        return creationResult;
     }
 
     public class CreateHiddenServiceResult {
