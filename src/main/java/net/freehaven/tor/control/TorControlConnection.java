@@ -22,6 +22,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** A connection to a running Tor process as specified in control-spec.txt. */
 public class TorControlConnection implements TorControlCommands {
@@ -204,6 +206,8 @@ public class TorControlConnection implements TorControlCommands {
 
         for (Iterator<ReplyLine> i = events.iterator(); i.hasNext(); ) {
             ReplyLine line = i.next();
+            if (line.msg.startsWith("OK"))
+                continue;
             int idx = line.msg.indexOf(' ');
             String tp = line.msg.substring(0, idx).toUpperCase();
             String rest = line.msg.substring(idx+1);
@@ -236,6 +240,18 @@ public class TorControlConnection implements TorControlCommands {
                        tp.equals("WARN") ||
                        tp.equals("ERR")) {
                 handler.message(tp, rest);
+            } else if (tp.equals("HS_DESC")) {
+                List<String> lst = Bytes.splitStr(null, rest);
+                Matcher matcher;
+                if ("FAILED".equals(lst.get(0))) {
+                    matcher = Pattern.compile("REASON=([^\\s]*)").matcher(rest);
+                    handler.hiddenServiceFailedEvent(matcher.find() ? matcher.group(1) : "NO_REASON", rest);
+                } else {
+                    handler.hiddenServiceEvent(lst.get(0), rest);
+                }
+            } else if (tp.equals("HS_DESC_CONTENT")) {
+                List<String> lst = Bytes.splitStr(null, rest);
+                handler.hiddenServiceDescriptor(lst.get(1), lst.size() > 3 ? lst.get(3) : "NO_DESCRIPTOR", rest);
             } else {
                 handler.unrecognized(tp, rest);
             }

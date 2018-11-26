@@ -65,11 +65,37 @@ public interface EventHandler {
      * and <b>msg</b> is the message string.
      */
     public void message(String severity, String msg);
+
     /**
-     * Invoked when an unspecified message is received.
-     * <type> is the message type, and <msg> is the message string.
+     * Invoked when Tor has information about a hidden service.
+     * 
+     * @param action is the message action
+     * @param msg    is the message string.
+     */
+    public void hiddenServiceEvent(String action, String msg);
+
+    /**
+     * Invoked when Tor reports an error regarding a hidden service.
+     * 
+     * @param reason [BAD_DESC,QUERY_REJECTED,UPLOAD_REJECTED,NOT_FOUND,UNEXPECTED,QUERY_NO_HSDIR,
+     *               NO_REASON]
+     * @param msg
+     */
+    public void hiddenServiceFailedEvent(String reason, String msg);
+
+    /**
+     * Invoked when Tor has a hidden service descriptor ready.
+     * 
+     * @param descriptorId
+     * @param descriptor
+     * @param msg
+     */
+    public void hiddenServiceDescriptor(String descriptorId, String descriptor, String msg);
+
+    /**
+     * Invoked when an unspecified message is received. <type> is the message type,
+     * and <msg> is the message string.
      */
     public void unrecognized(String type, String msg);
-
 }
 
