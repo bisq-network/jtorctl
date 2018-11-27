@@ -815,9 +815,32 @@ public class TorControlConnection implements TorControlCommands {
         return createHiddenService(port, "NEW:BEST");
     }
 
+    /**
+     * supported algorithms according to
+     * https://github.com/torproject/torspec/raw/4421149986369b4f746fc02a5d78c7337fe5d4ea/control-spec.txt
+     */
+    private final static String[] algorithms = { "RSA1024", "ED25519-V3" };
+
     public CreateHiddenServiceResult createHiddenService(Integer port, String private_key) throws IOException {
-        List<ReplyLine> result = sendAndWaitForResponse("ADD_ONION " + private_key + " Port=" + port + "\r\n",
-                null);
+        /*
+         * we could try to decode the supplied key and somehow get its type, however, as
+         * Java does not want to read PKCS1-encoded PEM without external help, we let
+         * the Tor binary do the math.
+         */
+        List<ReplyLine> result = null;
+        for (String algorithm : algorithms)
+            try {
+                result = sendAndWaitForResponse(
+                        "ADD_ONION " + getPemPrivateKey(private_key, algorithm) + " Port=" + port + "\r\n", null);
+                break;
+            } catch (Exception ignore) {
+            }
+
+        // in case result is still not properly filled, we do not know the correct
+        // key type. Maybe Tor has a new key type available?
+        if (null == result)
+            throw new IOException("Unsupported private_key algorithm. Did Tor get a new key type for hidden services?");
+
         CreateHiddenServiceResult creationResult = new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
                 private_key.contains("NEW") ? result.get(1).msg.replace("PrivateKey=", "") : private_key);
 
@@ -837,10 +860,34 @@ public class TorControlConnection implements TorControlCommands {
         public final String serviceID;
         public final String privateKey;
 
-        public CreateHiddenServiceResult(String serviceID, String privateKey) {
+        public CreateHiddenServiceResult(String serviceID, String privateKey) throws IOException {
             this.serviceID = serviceID;
-            this.privateKey = privateKey;
+            String type;
+            if (privateKey.startsWith(algorithms[0])) // i.e. RSA1024
+                type = "RSA";
+            else if (privateKey.startsWith(algorithms[1])) // i.e. ED25519-V3
+                type = "OPENSSH";
+            else
+                throw new IOException(
+                        "Unsupported private_key algorithm. Did Tor get a new key type for hidden services?");
+
+            this.privateKey = "-----BEGIN " + type + " PRIVATE KEY-----\n"
+                    + privateKey.substring(privateKey.indexOf(":") + 1) + "\n-----END " + type + " PRIVATE KEY-----";
         }
+    }
+
+    private String getPemPrivateKey(String keyBytes, String algorithm) throws Exception {
+        // we do not need to construct anything in case Tor is about to generate a key
+        if (keyBytes.startsWith("NEW"))
+            return keyBytes;
+
+        // cleanup PEM artifacts
+        String temp = new String(keyBytes);
+        String privKeyPEM = temp.replaceAll("-----(BEGIN|END) ?[A-Z]* PRIVATE KEY-----", "");
+        privKeyPEM = privKeyPEM.replaceAll("\n", "");
+
+        // construct the key type and blob
+        return algorithm + ":" + privKeyPEM;
     }
 
     /**
