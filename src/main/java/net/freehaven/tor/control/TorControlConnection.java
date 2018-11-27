@@ -862,17 +862,23 @@ public class TorControlConnection implements TorControlCommands {
 
         public CreateHiddenServiceResult(String serviceID, String privateKey) throws IOException {
             this.serviceID = serviceID;
-            String type;
-            if (privateKey.startsWith(algorithms[0])) // i.e. RSA1024
-                type = "RSA";
-            else if (privateKey.startsWith(algorithms[1])) // i.e. ED25519-V3
-                type = "OPENSSH";
-            else
-                throw new IOException(
-                        "Unsupported private_key algorithm. Did Tor get a new key type for hidden services?");
 
-            this.privateKey = "-----BEGIN " + type + " PRIVATE KEY-----\n"
-                    + privateKey.substring(privateKey.indexOf(":") + 1) + "\n-----END " + type + " PRIVATE KEY-----";
+            if (privateKey.startsWith("-----BEGIN")) // we reused a key
+                this.privateKey = privateKey;
+            else {
+                String type;
+                if (privateKey.startsWith(algorithms[0])) // i.e. RSA1024
+                    type = "RSA";
+                else if (privateKey.startsWith(algorithms[1])) // i.e. ED25519-V3
+                    type = "OPENSSH";
+                else
+                    throw new IOException(
+                            "Unsupported private_key algorithm. Did Tor get a new key type for hidden services?");
+
+                this.privateKey = "-----BEGIN " + type + " PRIVATE KEY-----\n"
+                        + privateKey.substring(privateKey.indexOf(":") + 1) + "\n-----END " + type
+                        + " PRIVATE KEY-----";
+            }
         }
     }
 
