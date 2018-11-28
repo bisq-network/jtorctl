@@ -70,7 +70,7 @@ public class Main implements TorControlCommands {
         Socket s = new Socket("127.0.0.1", 9151);
         TorControlConnection conn = new TorControlConnection(s);
         conn.launchThread(true);
-        conn.authenticate(new Byte[0]);
+        conn.authenticate(new byte[0]);
 
         conn.setEventHandler(
                 new DebuggingEventHandler(new PrintWriter(System.out, true)));
