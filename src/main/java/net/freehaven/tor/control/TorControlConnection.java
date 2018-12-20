@@ -342,6 +342,27 @@ public class TorControlConnection implements TorControlCommands {
         }
     }
 
+    /**
+     * 3.2. RESETCONF
+     * 
+     * Remove all settings for a given configuration option entirely, assign its
+     * default value (if any), and then assign the String provided. Typically the
+     * String is left empty, to simply set an option back to its default. The syntax
+     * is: <br>
+     * "RESETCONF" 1*(SP keyword ["=" String]) CRLF
+     * <p>
+     * ["=" String] is not supported (yet?)
+     * 
+     * @param keyword
+     * @throws IOException
+     */
+    public void resetConf(String keyword) throws IOException {
+        StringBuffer b = new StringBuffer("RESETCONF");
+        b.append(" ").append(keyword);
+        b.append("\r\n");
+        sendAndWaitForResponse(b.toString(), null);
+    }
+
     /** Change the value of the configuration option 'key' to 'val'.
      */
     public void setConf(String key, String value) throws IOException {
