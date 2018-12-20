@@ -15,7 +15,6 @@ import java.io.Writer;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -300,6 +299,10 @@ public class TorControlConnection implements TorControlCommands {
 
     protected class ControlParseThread extends Thread {
 
+        public ControlParseThread() {
+            setName("TorControlParser");
+        }
+
         @Override
     	public void run() {
             try {
@@ -522,7 +525,6 @@ public class TorControlConnection implements TorControlCommands {
      * Does not wait for a response. */
     public void shutdownTor(String signal) throws IOException {
         String s = "SIGNAL " + signal + "\r\n";
-        Waiter w = new Waiter();
         if (debugOutput != null)
             debugOutput.print(">> "+s);
         synchronized (waiters) {
