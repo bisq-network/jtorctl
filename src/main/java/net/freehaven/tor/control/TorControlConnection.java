@@ -835,7 +835,11 @@ public class TorControlConnection implements TorControlCommands {
      * @throws IOException
      */
     public CreateHiddenServiceResult createHiddenService(Integer port) throws IOException {
-        return createHiddenService(port, "NEW:BEST");
+        return createHiddenService(port, -1, "NEW:BEST");
+    }
+
+    public CreateHiddenServiceResult createHiddenService(Integer virtPort, Integer targetPort) throws IOException {
+        return createHiddenService(virtPort, targetPort, "NEW:BEST");
     }
 
     /**
@@ -844,7 +848,20 @@ public class TorControlConnection implements TorControlCommands {
      */
     private final static String[] algorithms = { "RSA1024", "ED25519-V3" };
 
+
     public CreateHiddenServiceResult createHiddenService(Integer port, String private_key) throws IOException {
+        return createHiddenService(port, -1, private_key);
+    }
+
+    public CreateHiddenServiceResult createHiddenService(Integer virtPort, Integer targetPort, String private_key)
+            throws IOException {
+
+        // assemble port string
+        String port = virtPort.toString();
+
+        if (targetPort > 0)
+            port += "," + targetPort;
+
         /*
          * we could try to decode the supplied key and somehow get its type, however, as
          * Java does not want to read PKCS1-encoded PEM without external help, we let
