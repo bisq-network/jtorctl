@@ -192,7 +192,7 @@ public class TorControlConnection implements TorControlCommands {
         for (Iterator<ReplyLine> i = lst.iterator(); i.hasNext(); ) {
             ReplyLine c = i.next();
             if (! c.status.startsWith("2"))
-                throw new TorControlError("Error reply: "+c.msg);
+                throw new TorControlError(Integer.valueOf(c.status),"Error reply: "+c.msg);
         }
         return lst;
     }
@@ -873,7 +873,9 @@ public class TorControlConnection implements TorControlCommands {
                 result = sendAndWaitForResponse(
                         "ADD_ONION " + getPemPrivateKey(private_key, algorithm) + " Port=" + port + "\r\n", null);
                 break;
-            } catch (Exception ignore) {
+            } catch (TorControlError e) {
+                if (e.getErrorType() != 513)
+                    throw new IOException(e.getMessage());
             }
 
         // in case result is still not properly filled, we do not know the correct
@@ -922,7 +924,7 @@ public class TorControlConnection implements TorControlCommands {
         }
     }
 
-    private String getPemPrivateKey(String keyBytes, String algorithm) throws Exception {
+    private String getPemPrivateKey(String keyBytes, String algorithm) {
         // we do not need to construct anything in case Tor is about to generate a key
         if (keyBytes.startsWith("NEW"))
             return keyBytes;
