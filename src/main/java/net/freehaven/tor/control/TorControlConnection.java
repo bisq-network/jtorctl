@@ -893,7 +893,7 @@ public class TorControlConnection implements TorControlCommands {
                 break;
             } catch (TorControlError e) {
                 if (e.getErrorType() != 513)
-                    throw new IOException(e.getMessage());
+                    throw e;
             }
 
         // in case result is still not properly filled, we do not know the correct
