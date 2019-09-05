@@ -21,6 +21,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,19 +43,30 @@ public class TorControlConnection implements TorControlCommands {
     private volatile IOException parseThreadException;
     
     static class Waiter {
+        Lock lock = new ReentrantLock();
+        Condition dataReady = lock.newCondition();
     
         List<ReplyLine> response; // Locking: this
     
-        synchronized List<ReplyLine> getResponse() throws InterruptedException {
-                while (response == null) {
-                    wait();
-                }
-            return response;
+        List<ReplyLine> getResponse() throws InterruptedException, TimeoutException {
+            lock.lock();
+            try {
+                if(!dataReady.await(1, TimeUnit.MINUTES))
+                    throw new TimeoutException();
+                return response;
+            } finally {
+                lock.unlock();
+            }
         }
 
-        synchronized void setResponse(List<ReplyLine> response) {
-            this.response = response;
-            notifyAll();
+        void setResponse(List<ReplyLine> response) {
+            lock.lock();
+            try {
+                this.response = response;
+                dataReady.signalAll();
+            } finally {
+                lock.unlock();
+            }
         }
     }
 
@@ -188,6 +204,8 @@ public class TorControlConnection implements TorControlCommands {
             lst = w.getResponse();
         } catch (InterruptedException ex) {
             throw new IOException("Interrupted");
+        } catch (TimeoutException e) {
+            throw new TorControlTimeoutError("We did not receive a response after one minute of waiting.");
         }
         for (Iterator<ReplyLine> i = lst.iterator(); i.hasNext(); ) {
             ReplyLine c = i.next();
