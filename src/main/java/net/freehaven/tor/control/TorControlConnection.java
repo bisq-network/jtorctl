@@ -205,6 +205,7 @@ public class TorControlConnection implements TorControlCommands {
         } catch (InterruptedException ex) {
             throw new IOException("Interrupted");
         } catch (TimeoutException e) {
+            if(null != handler) handler.timeout();
             throw new TorControlTimeoutError("We did not receive a response after one minute of waiting.");
         }
         for (Iterator<ReplyLine> i = lst.iterator(); i.hasNext(); ) {
@@ -899,7 +900,7 @@ public class TorControlConnection implements TorControlCommands {
         // in case result is still not properly filled, we do not know the correct
         // key type. Maybe Tor has a new key type available?
         if (null == result)
-            throw new IOException("Unsupported private_key algorithm. Did Tor get a new key type for hidden services?");
+            throw new IOException("We should not be here. Contact the developers!");
 
         CreateHiddenServiceResult creationResult = new CreateHiddenServiceResult(result.get(0).msg.replace("ServiceID=", ""),
                 private_key.contains("NEW") ? result.get(1).msg.replace("PrivateKey=", "") : private_key);

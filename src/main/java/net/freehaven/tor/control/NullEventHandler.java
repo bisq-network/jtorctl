@@ -17,5 +17,6 @@ public class NullEventHandler implements EventHandler {
     public void hiddenServiceFailedEvent(String reason, String msg) {}
     public void hiddenServiceDescriptor(String descriptorId, String descriptor, String msg) {}
     public void unrecognized(String type, String msg) {}
+    public void timeout() {}
 }
 

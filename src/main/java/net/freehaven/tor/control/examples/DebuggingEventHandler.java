@@ -52,5 +52,10 @@ public class DebuggingEventHandler implements EventHandler {
         out.println("unrecognized event ["+type+"] "+msg.trim());
     }
 
+    @Override
+    public void timeout() {
+        out.println("The control connection to tor did not provide a response within one minute of waiting.");
+    }
+
 }
 

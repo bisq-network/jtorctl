@@ -97,5 +97,10 @@ public interface EventHandler {
      * and <msg> is the message string.
      */
     public void unrecognized(String type, String msg);
+
+    /**
+     * Invoked when the Tor Control Connection takes longer than one minute to respond.
+     */
+    public void timeout();
 }
 
