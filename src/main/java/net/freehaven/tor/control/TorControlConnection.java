@@ -884,24 +884,10 @@ public class TorControlConnection implements TorControlCommands {
         if (targetPort > 0)
             port += "," + targetPort;
 
-        /*
-         * we could try to decode the supplied key and somehow get its type, however, as
-         * Java does not want to read PKCS1-encoded PEM without external help, we let
-         * the Tor binary do the math.
-         */
-        List<ReplyLine> result = null;
-        for (String algorithm : algorithms)
-            try {
-                result = sendAndWaitForResponse(
-                        "ADD_ONION " + getPemPrivateKey(private_key, algorithm) + " Port=" + port + "\r\n", null);
-                break;
-            } catch (TorControlError e) {
-                if (e.getErrorType() != 513)
-                    throw e;
-            }
+        List<ReplyLine> result = sendAndWaitForResponse(
+                    "ADD_ONION " + getEncodePrivateKey(private_key) + " Port=" + port + "\r\n", null);
 
-        // in case result is still not properly filled, we do not know the correct
-        // key type. Maybe Tor has a new key type available?
+        // null and we still got here? there is something wrong.
         if (null == result)
             throw new IOException("We should not be here. Contact the developers!");
 
@@ -946,10 +932,12 @@ public class TorControlConnection implements TorControlCommands {
         }
     }
 
-    private String getPemPrivateKey(String keyBytes, String algorithm) {
+    private String getEncodePrivateKey(String keyBytes) {
         // we do not need to construct anything in case Tor is about to generate a key
         if (keyBytes.startsWith("NEW"))
             return keyBytes;
+
+        String algorithm = keyBytes.contains("-BEGIN RSA PRIVATE KEY-") ? algorithms[0] : algorithms[1];
 
         // cleanup PEM artifacts
         String temp = new String(keyBytes);
