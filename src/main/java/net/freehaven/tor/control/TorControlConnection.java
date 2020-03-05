@@ -51,6 +51,9 @@ public class TorControlConnection implements TorControlCommands {
         List<ReplyLine> getResponse() throws InterruptedException, TimeoutException {
             lock.lock();
             try {
+                if(null != response)
+                    return response;
+
                 if(!dataReady.await(1, TimeUnit.MINUTES))
                     throw new TimeoutException();
                 return response;
@@ -193,11 +196,11 @@ public class TorControlConnection implements TorControlCommands {
         if (debugOutput != null)
             debugOutput.print(">> "+s);
         synchronized (waiters) {
+            waiters.addLast(w);
             output.write(s);
             if (rest != null)
                 writeEscaped(rest);
             output.flush();
-            waiters.addLast(w);
         }
         List<ReplyLine> lst;
         try {
@@ -206,7 +209,7 @@ public class TorControlConnection implements TorControlCommands {
             throw new IOException("Interrupted");
         } catch (TimeoutException e) {
             if(null != handler) handler.timeout();
-            throw new TorControlTimeoutError("We did not receive a response after one minute of waiting.");
+            throw new TorControlTimeoutError("We did not receive a response within one minute of waiting.");
         }
         for (Iterator<ReplyLine> i = lst.iterator(); i.hasNext(); ) {
             ReplyLine c = i.next();
